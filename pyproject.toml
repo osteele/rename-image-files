@@ -1,0 +1,59 @@
+[project]
+name = "rename-image-files"
+version = "0.1.0"
+description = "Rename image files using vision language models"
+authors = [{ name = "Oliver Steele", email = "steele@osteele.com" }]
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+
+dependencies = ["click", "exifread", "llm"]
+
+[project.scripts]
+rename-image-files = "rename_image_files:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.hatch.envs.default]
+dependencies = ["pytest", "pytest-cov", "ruff", "mypy", "Pillow"]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=rename_image_files {args:tests}"
+lint = ["ruff check .", "ruff format --check .", "mypy ."]
+format = ["ruff check --fix .", "ruff format ."]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["exifread", "llm", "llm.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["rename_image_files"]
