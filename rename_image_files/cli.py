@@ -3,12 +3,11 @@
 import os
 import queue
 import sys
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from queue import Queue
 from threading import Event, Thread
-from typing import Generator, NamedTuple
+from typing import NamedTuple
 
 import click
 import llm
@@ -32,6 +31,7 @@ MAX_FILENAME_LENGTH = 255  # Maximum filename length on most filesystems
 @dataclass
 class Stats:
     """Thread-safe statistics for directory scanning."""
+
     files_found: int = 0
     dirs_searched: int = 0
 
@@ -47,12 +47,14 @@ class Stats:
 @dataclass
 class SkippedFile:
     """Information about a skipped file."""
+
     path: Path
     reason: str
 
 
 class ScanResult(NamedTuple):
     """Result of scanning a single file."""
+
     path: Path
     stats: Stats
 
@@ -65,8 +67,7 @@ def generate_filename(
     """Generate a filename using the vision language model."""
     if not os.environ.get("OPENAI_API_KEY"):
         raise click.ClickException(
-            "OPENAI_API_KEY environment variable not set. "
-            "Get one from https://platform.openai.com/api-keys"
+            "OPENAI_API_KEY environment variable not set. " "Get one from https://platform.openai.com/api-keys"
         )
 
     response = model.prompt(
@@ -106,7 +107,12 @@ def scan_directory(
             for item in items:
                 if done.is_set():  # Check for early termination
                     return
-                if item.is_file() and item.suffix.lower() in [".jpg", ".jpeg", ".png", ".gif"]:
+                if item.is_file() and item.suffix.lower() in [
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".gif",
+                ]:
                     stats.increment_files()
                     queue.put(ScanResult(item, stats))
 
@@ -204,7 +210,6 @@ def main(
                     continue
 
                 img_path = result.path
-                current_stats = result.stats
 
                 # Check filename pattern
                 if not process_all and not is_camera_filename(img_path.name):
@@ -244,9 +249,7 @@ def main(
 
                 if not success:
                     # All attempts produced too-long filenames
-                    skipped_list.append(
-                        SkippedFile(img_path, "Generated filename too long")
-                    )
+                    skipped_list.append(SkippedFile(img_path, "Generated filename too long"))
                     continue
 
                 # Display results
@@ -270,9 +273,7 @@ def main(
                     new_path = img_path.parent / results[0][2]
                     try:
                         if new_path.exists():
-                            skipped_list.append(
-                                SkippedFile(img_path, f"Target {new_path} exists")
-                            )
+                            skipped_list.append(SkippedFile(img_path, f"Target {new_path} exists"))
                             continue
                         img_path.rename(new_path)
                     except OSError as e:
@@ -283,8 +284,7 @@ def main(
                 # Show progress on timeout if we're still scanning
                 if not done.is_set():
                     click.echo(
-                        f"Scanning... Found {stats.files_found} images in "
-                        f"{stats.dirs_searched} directories",
+                        f"Scanning... Found {stats.files_found} images in " f"{stats.dirs_searched} directories",
                         err=True,
                     )
 
@@ -294,8 +294,7 @@ def main(
         # Print final summary for this path
         if recursive and (stats.files_found > 0 or stats.dirs_searched > 0):
             click.echo(
-                f"\nScanned {stats.dirs_searched} directories, "
-                f"found {stats.files_found} images",
+                f"\nScanned {stats.dirs_searched} directories, " f"found {stats.files_found} images",
                 err=True,
             )
 
@@ -306,10 +305,20 @@ def main(
             "filename patterns (IMG-*, IMG_*, or UUID-style names).",
             err=True,
         )
-        click.echo(
-            "To process all image files, use the --all option.",
-            err=True,
+        # Check if any of the input paths have subdirectories
+        has_subdirs = any(
+            any(p.is_dir() and not p.name.startswith(".") for p in Path(f).iterdir()) for f in files if Path(f).is_dir()
         )
+        if has_subdirs and not recursive:
+            click.echo(
+                "To process all image files in this directory and subdirectories, " "use --all -r",
+                err=True,
+            )
+        else:
+            click.echo(
+                "To process all image files, use the --all option.",
+                err=True,
+            )
 
     # Print summary of skipped files
     if skipped_list:
