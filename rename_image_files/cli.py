@@ -2,11 +2,13 @@
 
 import os
 import queue
+import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from queue import Queue
 from threading import Event, Thread
-from typing import NamedTuple
+from typing import Generator, NamedTuple
 
 import click
 import llm
@@ -23,11 +25,13 @@ Example descriptions:
 - Mountain Lake Reflecting Snow Peaks
 - Child Blowing Birthday Candles"""
 
+MAX_RETRIES = 3  # Number of times to retry generating a shorter name
+MAX_FILENAME_LENGTH = 255  # Maximum filename length on most filesystems
+
 
 @dataclass
 class Stats:
     """Thread-safe statistics for directory scanning."""
-
     files_found: int = 0
     dirs_searched: int = 0
 
@@ -40,11 +44,37 @@ class Stats:
         self.dirs_searched += 1
 
 
+@dataclass
+class SkippedFile:
+    """Information about a skipped file."""
+    path: Path
+    reason: str
+
+
 class ScanResult(NamedTuple):
     """Result of scanning a single file."""
-
     path: Path
     stats: Stats
+
+
+def generate_filename(
+    model: llm.Model,
+    image_path: str,
+    prompt: str = DEFAULT_PROMPT,
+) -> str:
+    """Generate a filename using the vision language model."""
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise click.ClickException(
+            "OPENAI_API_KEY environment variable not set. "
+            "Get one from https://platform.openai.com/api-keys"
+        )
+
+    response = model.prompt(
+        prompt,
+        attachments=[llm.Attachment(path=image_path)],
+    )
+
+    return sanitize_filename(response.text())
 
 
 def scan_directory(
@@ -54,15 +84,7 @@ def scan_directory(
     stats: Stats,
     done: Event,
 ) -> None:
-    """Scan directory for image files in a separate thread.
-
-    Args:
-        path: Directory to scan
-        recursive: Whether to scan subdirectories
-        queue: Queue to put found files on
-        stats: Thread-safe statistics counter
-        done: Event to signal completion
-    """
+    """Scan directory for image files in a separate thread."""
     try:
         if path.is_file():
             if path.suffix.lower() in [".jpg", ".jpeg", ".png", ".gif"]:
@@ -84,12 +106,7 @@ def scan_directory(
             for item in items:
                 if done.is_set():  # Check for early termination
                     return
-                if item.is_file() and item.suffix.lower() in [
-                    ".jpg",
-                    ".jpeg",
-                    ".png",
-                    ".gif",
-                ]:
+                if item.is_file() and item.suffix.lower() in [".jpg", ".jpeg", ".png", ".gif"]:
                     stats.increment_files()
                     queue.put(ScanResult(item, stats))
 
@@ -107,26 +124,6 @@ def scan_directory(
         # Always signal completion, even if there's an error
         done.set()
         queue.put(None)  # Sentinel value
-
-
-def generate_filename(
-    model: llm.Model,
-    image_path: str,
-    prompt: str = DEFAULT_PROMPT,
-) -> str:
-    """Generate a filename using the vision language model."""
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise click.ClickException(
-            "OPENAI_API_KEY environment variable not set. "
-            "Get one from https://platform.openai.com/api-keys"
-        )
-
-    response = model.prompt(
-        prompt,
-        attachments=[llm.Attachment(path=image_path)],
-    )
-
-    return sanitize_filename(response.text())
 
 
 @click.command()
@@ -171,14 +168,7 @@ def main(
     process_all: bool,
     recursive: bool,
 ) -> None:
-    """Rename image files based on their content using vision language models.
-
-    If multiple models or prompts are specified, each file will be processed with each
-    model/prompt combination, and the results will be displayed for comparison.
-
-    By default, only processes files whose names begin with 'IMG-' or 'IMG_'
-    (case-insensitive), or whose names look like UUIDs. Use --all to process all files.
-    """
+    """Rename image files based on their content using vision language models."""
     if not prompt:
         prompt = (DEFAULT_PROMPT,)
 
@@ -188,6 +178,7 @@ def main(
     # Process each file or directory
     processed_files = False
     skipped_files = False
+    skipped_list: list[SkippedFile] = []
 
     for file_path in files:
         # Set up thread communication
@@ -228,18 +219,35 @@ def main(
                 if date:
                     date_prefix = date.strftime("%Y-%m-%d-")
 
-                # Generate filenames using each model/prompt combination
-                results = []
-                for model_name, model_obj in models.items():
-                    for p in prompt:
-                        new_name = generate_filename(model_obj, str(img_path), p)
-                        results.append(
-                            (
-                                model_name,
-                                p,
-                                f"{date_prefix}{new_name}{img_path.suffix.lower()}",
-                            )
-                        )
+                # Try generating filenames with retries for long names
+                success = False
+                for attempt in range(MAX_RETRIES):
+                    # Add "brief" to the prompt after first attempt
+                    current_prompt = prompt[0]
+                    if attempt > 0:
+                        current_prompt = "Keep it very brief. " + current_prompt
+
+                    # Generate filenames using each model/prompt combination
+                    results = []
+                    for model_name, model_obj in models.items():
+                        for p in prompt:
+                            new_name = generate_filename(model_obj, str(img_path), p)
+                            full_name = f"{date_prefix}{new_name}{img_path.suffix.lower()}"
+                            if len(full_name) <= MAX_FILENAME_LENGTH:
+                                results.append((model_name, p, full_name))
+                                success = True
+                                break
+                        if success:
+                            break
+                    if success:
+                        break
+
+                if not success:
+                    # All attempts produced too-long filenames
+                    skipped_list.append(
+                        SkippedFile(img_path, "Generated filename too long")
+                    )
+                    continue
 
                 # Display results
                 if len(results) == 1:
@@ -260,13 +268,16 @@ def main(
                 # If not dry run and we have exactly one result, perform the rename
                 if not dry_run and len(results) == 1:
                     new_path = img_path.parent / results[0][2]
-                    if new_path.exists():
-                        click.echo(
-                            f"Skipping {img_path}: target {new_path} exists",
-                            err=True,
-                        )
+                    try:
+                        if new_path.exists():
+                            skipped_list.append(
+                                SkippedFile(img_path, f"Target {new_path} exists")
+                            )
+                            continue
+                        img_path.rename(new_path)
+                    except OSError as e:
+                        skipped_list.append(SkippedFile(img_path, str(e)))
                         continue
-                    img_path.rename(new_path)
 
             except queue.Empty:
                 # Show progress on timeout if we're still scanning
@@ -299,6 +310,15 @@ def main(
             "To process all image files, use the --all option.",
             err=True,
         )
+
+    # Print summary of skipped files
+    if skipped_list:
+        click.echo("\nSkipped files:", err=True)
+        for skipped in skipped_list:
+            click.echo(f"  {skipped.path}: {skipped.reason}", err=True)
+        sys.exit(1)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":

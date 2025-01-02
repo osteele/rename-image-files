@@ -103,9 +103,7 @@ def test_is_camera_filename() -> None:
     assert not is_camera_filename("photo.jpg")
     assert not is_camera_filename("image_1234.jpg")
     assert not is_camera_filename("picture.jpg")
-    assert not is_camera_filename(
-        "63C0900B4465-4CF9-A310-327C627DB9EA.jpg"
-    )  # Invalid UUID
+    assert not is_camera_filename("63C0900B4465-4CF9-A310-327C627DB9EA.jpg")  # Invalid UUID
 
 
 def test_sanitize_filename() -> None:
