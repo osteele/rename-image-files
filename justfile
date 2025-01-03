@@ -5,31 +5,35 @@ default:
     @just --list
 
 # Setup development environment
-setup:
-    uv pip install -e ".[dev]"
+install:
+    uv sync
 
 # Run all checks (linting, formatting, type checking)
-check:
-    hatch run format
-    hatch run lint
-    hatch run test
+# Run all validation steps in order:
+# 1. Fix formatting and lint issues (format)
+# 2. Check for remaining lint errors and type issues (lint)
+# 3. Run tests to verify nothing was broken (test)
+check: fix lint test
 
-# Format code
+# Fix issues without failing on remaining ones (useful during development)
 format:
-    hatch run format
+    uv run --dev ruff format .              # Format code first
+    uv run --dev ruff check --fix-only .    # Fix remaining auto-fixable lint issues
 
-# Fix linting and formatting issues, even in a dirty git workspace
+# Like format, but also shows unfixable issues that need manual attention
 fix:
-    ruff check --fix-only .
-    ruff format .
+    uv run --dev ruff format .              # Format code first
+    uv run --dev ruff check --fix .         # Then apply fixes without failing on remaining issues
+
+# Verify code quality without modifying files
+lint:
+    uv run --dev ruff format --check .      # Verify formatting without making changes
+    uv run --dev ruff check .               # Check for lint issues
+    uv run --dev mypy .                     # Run static type checking
 
 # Run tests
 test:
-    hatch run test
-
-# Run tests with coverage
-test-cov:
-    hatch run test-cov
+    uv run --dev pytest
 
 # Clean up temporary files
 clean:

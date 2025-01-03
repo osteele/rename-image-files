@@ -108,7 +108,6 @@ The test suite covers:
 Run tests with:
 ```bash
 just test        # Run tests
-just test-cov    # Run tests with coverage
 ```
 
 ## Known Limitations

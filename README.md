@@ -116,16 +116,15 @@ rename-image-files -r ~/Pictures/Vacation
 
 2. Install development dependencies:
    ```bash
-   just setup
+   just install
    ```
 
 ### Development Commands
 
-- `just check` - Run linting, formatting, and tests
-- `just format` - Format code
-- `just fix` - Fix linting and formatting issues (works in dirty git workspaces)
+- `just format` - Fix format and some lint issue
+- `just fix` - Formatting, lint, and report remaining issues
 - `just test` - Run tests
-- `just test-cov` - Run tests with coverage report
+- `just check` - Run linting, formatting, and tests
 
 ## License
 
