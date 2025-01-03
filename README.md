@@ -102,7 +102,7 @@ rename-image-files -r ~/Pictures/Vacation
 
 ### Prerequisites
 
-- Python 3.12 or later
+- Python 3.10 or later
 - [uv](https://github.com/astral-sh/uv) for dependency management
 - [just](https://github.com/casey/just) for running development commands
 
