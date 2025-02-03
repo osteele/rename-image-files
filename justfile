@@ -29,7 +29,7 @@ fix:
 lint:
     uv run --dev ruff format --check .      # Verify formatting without making changes
     uv run --dev ruff check .               # Check for lint issues
-    uv run --dev mypy .                     # Run static type checking
+    uv run --dev pyright .                  # Run static type checking
 
 # Run tests
 test:

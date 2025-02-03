@@ -7,10 +7,10 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = { text = "MIT" }
 
-dependencies = ["click", "exifread", "llm"]
+dependencies = ["click", "exifread", "llm", "rich"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov", "ruff", "mypy", "Pillow"]
+dev = ["pytest", "pytest-cov", "ruff", "pyright", "Pillow"]
 
 [project.scripts]
 rename-image-files = "rename_image_files:main"
@@ -36,14 +36,13 @@ select = [
   "UP", # upgrade syntax to newer Python versions
 ]
 
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-check_untyped_defs = true
-exclude = ['.venv/']
+[tool.pyright]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false
+exclude = [".venv"]
+reportUnusedImport = false
 
-[[tool.mypy.overrides]]
-module = ["exifread", "llm", "llm.*"]
+[[tool.pyright.overrides]]
+module = ["exifread", "llm", "llm.*", "rich", "rich.*"]
 ignore_missing_imports = true
