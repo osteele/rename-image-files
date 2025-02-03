@@ -1,19 +1,19 @@
 [project]
 name = "rename-image-files"
-version = "0.1.0"
+version = "0.2.0-a1"
 description = "Rename image files using vision language models"
 authors = [{ name = "Oliver Steele", email = "steele@osteele.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 readme = "README.md"
 license = { text = "MIT" }
 
-dependencies = ["click", "exifread", "llm", "rich"]
+dependencies = ["click", "exifread", "llm", "llm-gemini", "rich", "pillow", "pillow-heif"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov", "ruff", "pyright", "Pillow"]
+dev = ["pytest", "pytest-cov", "ruff", "pyright"]
 
 [project.scripts]
-rename-image-files = "rename_image_files:main"
+rename-image-files = "rename_image_files.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -30,14 +30,14 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = [
-  "E", # pycodestyle errors
-  "F", # Pyflakes rules
-  "I", # isort import sorting
+  "E",  # pycodestyle errors
+  "F",  # Pyflakes rules
+  "I",  # isort import sorting
   "UP", # upgrade syntax to newer Python versions
 ]
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 typeCheckingMode = "basic"
 reportMissingTypeStubs = false
 exclude = [".venv"]
